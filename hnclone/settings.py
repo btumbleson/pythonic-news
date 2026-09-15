@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
+from urllib.parse import urlparse
+
+import dj_database_url
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,16 +25,24 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'TODO' # TODO
+SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
 
 USE_X_FORWARDED_HOST = True
-ALLOWED_HOSTS = [
-    'news.python.sc',
-    'localhost',
+# Laravel Cloud terminates TLS at the proxy and forwards this header, so
+# Django needs to be told how to recognize the original request was HTTPS.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
+
+# Laravel Cloud injects this as a full origin (e.g. "https://host"), but
+# Django 2.2 expects bare hosts, so strip the scheme off each entry.
+CSRF_TRUSTED_ORIGINS = [
+    urlparse(origin.strip()).netloc or origin.strip()
+    for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
 ]
 
 
@@ -97,10 +108,11 @@ WSGI_APPLICATION = 'hnclone.wsgi.application'
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL', 'sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3')),
+        conn_max_age=600,
+        ssl_require=True,
+    )
 }
 
 
@@ -170,5 +182,5 @@ ACCEPT_UNINVITED_REGISTRATIONS = False
 
 
 SITE_NAME = 'Pythonic News'
-SITE_URL = 'https://news.python.sc'
-SITE_DOMAIN = 'news.python.sc'
+SITE_URL = os.environ.get('SITE_URL') or os.environ.get('APP_URL', 'https://news.python.sc')
+SITE_DOMAIN = os.environ.get('SITE_DOMAIN') or urlparse(SITE_URL).netloc
